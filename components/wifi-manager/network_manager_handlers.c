@@ -824,8 +824,12 @@ static state_machine_result_t WIFI_CONNECTING_STATE_handler(state_machine_t* con
         case EN_LOST_CONNECTION:
             if(nm->event_parameters->disconnected_event->reason == WIFI_REASON_ASSOC_LEAVE || nm->event_parameters->disconnected_event->reason == WIFI_REASON_AUTH_EXPIRE || nm->event_parameters->disconnected_event->reason ==  WIFI_REASON_ASSOC_EXPIRE) {
                 ESP_LOGI(TAG,"Wifi was disconnected from previous access point. Waiting to connect.");
-            }
-            else if(nm->event_parameters->disconnected_event->reason != WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT) {
+            } else if (nm->wifi_ever_connected &&
+                       nm->event_parameters->disconnected_event->reason != WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT) {
+                /* Previously connected since boot: stay in the active state group so the AP
+                   hotspot is not started. WIFI_LOST_CONNECTION_STATE will handle retry/backoff. */
+                result = local_traverse_state(State_Machine, &Wifi_Active_State[WIFI_LOST_CONNECTION_STATE],__FUNCTION__);
+            } else if(nm->event_parameters->disconnected_event->reason != WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT) {
                 network_status_update_ip_info(UPDATE_FAILED_ATTEMPT);
                 result = local_traverse_state(State_Machine, &Wifi_Configuring_State[WIFI_CONFIGURING_STATE],__FUNCTION__);
             }
@@ -1099,7 +1103,12 @@ static state_machine_result_t WIFI_LOST_CONNECTION_STATE_handler(state_machine_t
             result= local_traverse_state(State_Machine, &Wifi_Active_State[WIFI_LOST_CONNECTION_STATE],__FUNCTION__);
             break;
         case EN_CONNECT:
-            result= local_traverse_state(State_Machine, &Wifi_Configuring_State[WIFI_CONNECTING_STATE],__FUNCTION__);
+            /* Must use Wifi_Active_State here, NOT Wifi_Configuring_State.
+               WIFI_CONNECTING_STATE=1 and WIFI_CONFIGURING_CONNECT_STATE=1 share the same
+               integer value; using Wifi_Configuring_State would accidentally enter the
+               "new credentials from web UI" state, reparent to NETWORK_WIFI_CONFIGURING_ACTIVE_STATE,
+               and start the AP hotspot on every retry. */
+            result= local_traverse_state(State_Machine, &Wifi_Active_State[WIFI_CONNECTING_STATE],__FUNCTION__);
             break;
         default:
             result= EVENT_UN_HANDLED;
