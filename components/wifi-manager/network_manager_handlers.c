@@ -963,6 +963,8 @@ static state_machine_result_t WIFI_CONNECTED_STATE_entry_handler(state_machine_t
     ESP_LOGD(TAG, "Updating the ip info json.");
     network_interface_coexistence(State_Machine);
     nm->wifi_connected = true;
+    nm->wifi_ever_connected = true;
+    nm->STA_duration = 0;  // reset backoff so next disconnect starts fresh
     NETWORK_EXECUTE_CB(State_Machine);
     network_handler_entry_print(State_Machine,false);
     return EVENT_HANDLED;
@@ -1043,13 +1045,23 @@ static state_machine_result_t WIFI_LOST_CONNECTION_STATE_entry_handler(state_mac
         ESP_LOGD(TAG, " Retrying connection connection, %d/%d.", nm->retries, WIFI_MANAGER_MAX_RETRY);
         network_async(EN_CONNECT);
     } else {
-        /* In this scenario the connection was lost beyond repair */
         nm->retries = 0;
         ESP_LOGD(TAG,"Checking if ethernet interface is connected");
         if (network_is_interface_connected(nm->eth_netif)) {
             ESP_LOGW(TAG, "Cannot connect to Wifi. Falling back to Ethernet ");
             network_async(EN_ETHERNET_FALLBACK);
+        } else if (nm->wifi_ever_connected) {
+            /* WiFi connected successfully since boot - retry indefinitely with backoff.
+               Do not start the AP hotspot; the user expects to reconnect to their network. */
+            if (nm->STA_duration < nm->sta_polling_min_ms) {
+                nm->STA_duration = nm->sta_polling_min_ms;
+            } else if (nm->STA_duration < nm->sta_polling_max_ms) {
+                nm->STA_duration = (uint32_t)(nm->STA_duration * 1.25f);
+            }
+            network_set_timer(nm->STA_duration, "Wifi Reconnect");
+            ESP_LOGW(TAG, " WiFi was previously connected - retrying indefinitely. Next attempt in %dms.", nm->STA_duration);
         } else {
+            /* Never connected since boot: fall back to softAP configuration portal */
             network_status_update_ip_info(UPDATE_LOST_CONNECTION);
             wifi_mode_t mode;
             ESP_LOGW(TAG, " All connect retry attempts failed.");

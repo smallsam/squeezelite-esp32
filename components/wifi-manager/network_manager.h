@@ -73,6 +73,7 @@ typedef struct
 	uint16_t num_disconnect;
 	uint16_t retries;
     bool wifi_connected;
+    bool wifi_ever_connected;  // true once WiFi has successfully connected since boot
 	esp_netif_t *wifi_netif;
 	esp_netif_t *eth_netif;
 	esp_netif_t *wifi_ap_netif;
