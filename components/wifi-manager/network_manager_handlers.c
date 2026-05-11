@@ -1039,11 +1039,12 @@ static state_machine_result_t WIFI_LOST_CONNECTION_STATE_entry_handler(state_mac
     messaging_post_message(MESSAGING_WARNING, MESSAGING_CLASS_SYSTEM, "WiFi Connection lost");
     network_status_update_ip_info(UPDATE_LOST_CONNECTION);
     network_status_safe_reset_sta_ip_string();
-    if (nm->last_connected > 0)
+    if (nm->last_connected > 0) {
         nm->total_connected_time += ((esp_timer_get_time() - nm->last_connected) / (1000 * 1000));
-    nm->last_connected = 0;
-    nm->num_disconnect++;
-    ESP_LOGW(TAG, " Wifi disconnected. Number of disconnects: %d, Average time connected: %d", nm->num_disconnect, nm->num_disconnect > 0 ? (nm->total_connected_time / nm->num_disconnect) : 0);
+        nm->last_connected = 0;
+        nm->num_disconnect++;
+        ESP_LOGW(TAG, " Wifi disconnected. Number of disconnects: %d, Average time connected: %d", nm->num_disconnect, nm->num_disconnect > 0 ? (nm->total_connected_time / nm->num_disconnect) : 0);
+    }
     if (nm->retries < WIFI_MANAGER_MAX_RETRY) {
         nm->retries++;
         ESP_LOGD(TAG, " Retrying connection connection, %d/%d.", nm->retries, WIFI_MANAGER_MAX_RETRY);
@@ -1057,13 +1058,15 @@ static state_machine_result_t WIFI_LOST_CONNECTION_STATE_entry_handler(state_mac
         } else if (nm->wifi_ever_connected) {
             /* WiFi connected successfully since boot - retry indefinitely with backoff.
                Do not start the AP hotspot; the user expects to reconnect to their network. */
-            if (nm->STA_duration < nm->sta_polling_min_ms) {
-                nm->STA_duration = nm->sta_polling_min_ms;
-            } else if (nm->STA_duration < nm->sta_polling_max_ms) {
-                nm->STA_duration = (uint32_t)(nm->STA_duration * 1.25f);
+            if (nm->STA_duration < WIFI_RECONNECT_BACKOFF_MIN_MS) {
+                nm->STA_duration = WIFI_RECONNECT_BACKOFF_MIN_MS;
+            } else {
+                nm->STA_duration *= 2;
+                if (nm->STA_duration > WIFI_RECONNECT_BACKOFF_MAX_MS)
+                    nm->STA_duration = WIFI_RECONNECT_BACKOFF_MAX_MS;
             }
             network_set_timer(nm->STA_duration, "Wifi Reconnect");
-            ESP_LOGW(TAG, " WiFi was previously connected - retrying indefinitely. Next attempt in %dms.", nm->STA_duration);
+            ESP_LOGW(TAG, " WiFi was previously connected - retrying indefinitely. Next attempt in %"PRIu32"ms.", nm->STA_duration);
         } else {
             /* Never connected since boot: fall back to softAP configuration portal */
             network_status_update_ip_info(UPDATE_LOST_CONNECTION);

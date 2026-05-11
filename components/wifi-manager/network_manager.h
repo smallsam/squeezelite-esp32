@@ -161,6 +161,13 @@ bool network_is_interface_connected(esp_netif_t * interface);
  */
 #define	WIFI_MANAGER_MAX_RETRY				CONFIG_WIFI_MANAGER_MAX_RETRY
 
+/** @brief Reconnect backoff for an established connection that was lost.
+ *  Starts at BACKOFF_MIN_MS, doubles each retry, capped at BACKOFF_MAX_MS.
+ *  This is separate from the STA scan polling interval (sta_polling_min/max_ms).
+ */
+#define WIFI_RECONNECT_BACKOFF_MIN_MS   1000
+#define WIFI_RECONNECT_BACKOFF_MAX_MS  10000
+
 /** @brief Defines the task priority of the wifi_manager.
  *
  * Tasks spawn by the manager will have a priority of WIFI_MANAGER_TASK_PRIORITY-1.
